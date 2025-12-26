@@ -7,8 +7,8 @@
         public int? ServiceId { get; set; }
         public string? Status { get; set; }
         public DateTime? Date {  get; set; }
-        public int? Skip { get; set; }
-        public int? Take { get; set; }
+        public int? PageNumber { get; set; }
+        public int? PageSize { get; set; }
 
     }
 }

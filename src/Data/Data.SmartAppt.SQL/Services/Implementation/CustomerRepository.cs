@@ -53,27 +53,34 @@ namespace Data.SmartAppt.SQL.Services.Implementation
             await cmd.ExecuteNonQueryAsync();
         }
 
-        public virtual async Task<IEnumerable<CustomerEntity>> GetAllAsync(int skip = 0, int take = 10)
+        public virtual async Task<IEnumerable<CustomerEntity>> GetAllAsync(int pageNumber = 1, int pageSize = 10)
         {
             await EnsureOpenAsync();
 
-            var customers = new List<CustomerEntity>();
             using var cmd = new SqlCommand("core.Customer_GetAll", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
             
-            cmd.Parameters.Add(new SqlParameter("@Skip", SqlDbType.Int) { Value = skip });
-            cmd.Parameters.Add(new SqlParameter("@Take", SqlDbType.Int) { Value = take });
+            cmd.Parameters.Add(new SqlParameter("@PageNumber", SqlDbType.Int) { Value = pageNumber });
+            cmd.Parameters.Add(new SqlParameter("@PageSize", SqlDbType.Int) { Value = pageSize });
 
             using var reader = await cmd.ExecuteReaderAsync();
+            var customers = new List<CustomerEntity>();
+            
+            int ordCustomerId = reader.GetOrdinal("CustomerId");
+            int ordBusinessId = reader.GetOrdinal("BusinessId");
+            int ordFullName = reader.GetOrdinal("FullName");
+            int ordEmail = reader.GetOrdinal("Email");
+            int ordPhone = reader.GetOrdinal("Phone");
+            
             while (await reader.ReadAsync())
             {
                 customers.Add(new CustomerEntity
                 {
-                    CustomerId = reader.GetInt32(reader.GetOrdinal("CustomerId")),
-                    BusinessId = reader.GetInt32(reader.GetOrdinal("BusinessId")),
-                    FullName = reader.GetString(reader.GetOrdinal("FullName")),
-                    Email = reader.IsDBNull(reader.GetOrdinal("Email")) ? null : reader.GetString(reader.GetOrdinal("Email")),
-                    Phone = reader.IsDBNull(reader.GetOrdinal("Phone")) ? null : reader.GetString(reader.GetOrdinal("Phone"))
+                    CustomerId = reader.GetInt32(ordCustomerId),
+                    BusinessId = reader.GetInt32(ordBusinessId),
+                    FullName = reader.GetString(ordFullName),
+                    Email = reader.IsDBNull(ordEmail) ? null : reader.GetString(ordEmail),
+                    Phone = reader.IsDBNull(ordPhone) ? null : reader.GetString(ordPhone)
                 });
             }
 

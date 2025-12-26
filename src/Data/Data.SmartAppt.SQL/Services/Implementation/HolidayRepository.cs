@@ -50,26 +50,32 @@ namespace Data.SmartAppt.SQL.Services.Implementation
             await cmd.ExecuteNonQueryAsync();
         }
 
-        public virtual async Task<IEnumerable<HolidayEntity>> GetAllAsync(int skip = 0, int take = 10)
+        public virtual async Task<IEnumerable<HolidayEntity>> GetAllAsync(int pageNumber = 1, int pageSize = 10)
         {
             await EnsureOpenAsync();
 
-            var holidays = new List<HolidayEntity>();
             using var cmd = new SqlCommand("core.Holiday_GetAll", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
             
-            cmd.Parameters.Add(new SqlParameter("@Skip", SqlDbType.Int) { Value = skip });
-            cmd.Parameters.Add(new SqlParameter("@Take", SqlDbType.Int) { Value = take });
+            cmd.Parameters.Add(new SqlParameter("@PageNumber", SqlDbType.Int) { Value = pageNumber });
+            cmd.Parameters.Add(new SqlParameter("@PageSize", SqlDbType.Int) { Value = pageSize });
 
             using var reader = await cmd.ExecuteReaderAsync();
+            var holidays = new List<HolidayEntity>();
+            
+            int ordHolidayId = reader.GetOrdinal("HolidayId");
+            int ordBusinessId = reader.GetOrdinal("BusinessId");
+            int ordHolidayDate = reader.GetOrdinal("HolidayDate");
+            int ordReason = reader.GetOrdinal("Reason");
+            
             while (await reader.ReadAsync())
             {
                 holidays.Add(new HolidayEntity
                 {
-                    HolidayId = reader.GetInt32(reader.GetOrdinal("HolidayId")),
-                    BusinessId = reader.GetInt32(reader.GetOrdinal("BusinessId")),
-                    HolidayDate = reader.GetDateTime(reader.GetOrdinal("HolidayDate")),
-                    Reason = reader.IsDBNull(reader.GetOrdinal("Reason")) ? null : reader.GetString(reader.GetOrdinal("Reason"))
+                    HolidayId = reader.GetInt32(ordHolidayId),
+                    BusinessId = reader.GetInt32(ordBusinessId),
+                    HolidayDate = reader.GetDateTime(ordHolidayDate),
+                    Reason = reader.IsDBNull(ordReason) ? null : reader.GetString(ordReason)
                 });
             }
 

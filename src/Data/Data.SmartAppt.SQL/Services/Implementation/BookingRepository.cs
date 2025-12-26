@@ -6,35 +6,92 @@ namespace Data.SmartAppt.SQL.Services.Implementation
 {
     public class BookingRepository : IBookingRepository
     {
-        private readonly IDbConnection _connection;
+        protected readonly IDbConnection Connection;
 
         public BookingRepository(IDbConnection connection)
         {
-            _connection = connection;
+            Connection = connection;
         }
 
         protected virtual async Task EnsureOpenAsync()
         {
-            if (_connection.State != ConnectionState.Open)
-                await ((SqlConnection)_connection).OpenAsync();
+            if (Connection.State != ConnectionState.Open)
+                await ((SqlConnection)Connection).OpenAsync();
         }
 
         public virtual async Task CancelAsync(int bookingId)
         {
             await EnsureOpenAsync();
 
-            using var cmd = new SqlCommand("core.Booking_Cancel", (SqlConnection)_connection);
+            using var cmd = new SqlCommand("core.Booking_Cancel", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
             cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = bookingId });
 
             await cmd.ExecuteNonQueryAsync();
         }
 
+        public virtual async Task ChangeBookingStatusAsync(int bookingId, string status)
+        {
+            await EnsureOpenAsync();
+            
+            using var cmd = new SqlCommand("core.Booking_ChangeStatus", (SqlConnection)Connection);
+            cmd.CommandType = CommandType.StoredProcedure;
+            
+            cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = bookingId });
+            cmd.Parameters.Add(new SqlParameter("@Status", SqlDbType.VarChar, 12) { Value = status });
+            
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        public virtual async Task<IEnumerable<BookingEntity>> GetBookingsByRangeAsync(int businessId, DateTime from, DateTime to, int pageNumber = 1, int pageSize = 10)
+        {
+            await EnsureOpenAsync();
+            
+            using var cmd = new SqlCommand("core.Booking_GetBookingsByRange", (SqlConnection)Connection);
+            cmd.CommandType = CommandType.StoredProcedure;
+            
+            cmd.Parameters.Add(new SqlParameter("@BusinessId", SqlDbType.Int) { Value = businessId });
+            cmd.Parameters.Add(new SqlParameter("@StartAtUtc", SqlDbType.DateTime2) { Value = from });
+            cmd.Parameters.Add(new SqlParameter("@EndAtUtc", SqlDbType.DateTime2) { Value = to });
+            cmd.Parameters.Add(new SqlParameter("@PageNumber", SqlDbType.Int) { Value = pageNumber });
+            cmd.Parameters.Add(new SqlParameter("@PageSize", SqlDbType.Int) { Value = pageSize });
+            
+            using var reader = await cmd.ExecuteReaderAsync();
+            
+            int ordBookingId = reader.GetOrdinal("BookingId");
+            int ordServiceId = reader.GetOrdinal("ServiceId");
+            int ordCustomerId = reader.GetOrdinal("CustomerId");
+            int ordStart = reader.GetOrdinal("StartAtUtc");
+            int ordEnd = reader.GetOrdinal("EndAtUtc");
+            int ordStatus = reader.GetOrdinal("Status");
+            int ordNotes = reader.GetOrdinal("Notes");
+
+            List<BookingEntity> bookings = new List<BookingEntity>();
+            
+            while (await reader.ReadAsync())
+            {
+                bookings.Add(new BookingEntity
+                {
+                    BookingId = reader.GetInt32(ordBookingId),
+                    BusinessId = businessId,
+                    ServiceId = reader.GetInt32(ordServiceId),
+                    CustomerId = reader.GetInt32(ordCustomerId),
+                    StartAtUtc = reader.GetDateTime(ordStart),
+                    EndAtUtc = reader.GetDateTime(ordEnd),
+                    Status = reader.GetString(ordStatus),
+                    Notes = reader.GetString(ordNotes),
+                });
+            }
+
+            return bookings;
+
+        }
+
         public virtual async Task<int> CreateAsync(BookingEntity entity)
         {
             await EnsureOpenAsync();
 
-            using var cmd = new SqlCommand("core.Booking_SafeCreate", (SqlConnection)_connection);
+            using var cmd = new SqlCommand("core.Booking_SafeCreate", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
 
             cmd.Parameters.Add(new SqlParameter("@BusinessId", SqlDbType.Int) { Value = entity.BusinessId });
@@ -55,37 +112,47 @@ namespace Data.SmartAppt.SQL.Services.Implementation
         {
             await EnsureOpenAsync();
 
-            using var cmd = new SqlCommand("core.Booking_Delete", (SqlConnection)_connection);
+            using var cmd = new SqlCommand("core.Booking_Delete", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
             cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = bookingId });
 
             await cmd.ExecuteNonQueryAsync();
         }
 
-        public virtual async Task<IEnumerable<BookingEntity>> GetAllAsync(int skip = 0, int take = 10)
+        public virtual async Task<IEnumerable<BookingEntity>> GetAllAsync(int pageNumber = 1, int pageSize = 10)
         {
             await EnsureOpenAsync();
 
-            using var cmd = new SqlCommand("core.Booking_GetAll", (SqlConnection)_connection);
+            using var cmd = new SqlCommand("core.Booking_GetAll", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Parameters.Add(new SqlParameter("@Skip", SqlDbType.Int) { Value = skip });
-            cmd.Parameters.Add(new SqlParameter("@Take", SqlDbType.Int) { Value = take });
+            cmd.Parameters.Add(new SqlParameter("@PageNumber", SqlDbType.Int) { Value = pageNumber });
+            cmd.Parameters.Add(new SqlParameter("@PageSize", SqlDbType.Int) { Value = pageSize });
 
-            var bookings = new List<BookingEntity>();
             using var reader = await cmd.ExecuteReaderAsync();
+            
+            int ordBookingId = reader.GetOrdinal("BookingId");
+            int ordBusinessId = reader.GetOrdinal("BusinessId");
+            int ordServiceId = reader.GetOrdinal("ServiceId");
+            int ordCustomerId = reader.GetOrdinal("CustomerId");
+            int ordStart = reader.GetOrdinal("StartAtUtc");
+            int ordEnd = reader.GetOrdinal("EndAtUtc");
+            int ordStatus = reader.GetOrdinal("Status");
+            int ordNotes = reader.GetOrdinal("Notes");
+
+            List<BookingEntity> bookings = new List<BookingEntity>();
+            
             while (await reader.ReadAsync())
             {
                 bookings.Add(new BookingEntity
                 {
-                    BookingId = reader.GetInt32(reader.GetOrdinal("BookingId")),
-                    BusinessId = reader.GetInt32(reader.GetOrdinal("BusinessId")),
-                    ServiceId = reader.GetInt32(reader.GetOrdinal("ServiceId")),
-                    CustomerId = reader.GetInt32(reader.GetOrdinal("CustomerId")),
-                    StartAtUtc = reader.GetDateTime(reader.GetOrdinal("StartAtUtc")),
-                    EndAtUtc = reader.GetDateTime(reader.GetOrdinal("EndAtUtc")),
-                    Status = reader.GetString(reader.GetOrdinal("Status")),
-                    Notes = reader.IsDBNull(reader.GetOrdinal("Notes")) ? null : reader.GetString(reader.GetOrdinal("Notes")),
-                    CreatedAtUtc = reader.GetDateTime(reader.GetOrdinal("CreatedAtUtc"))
+                    BookingId = reader.GetInt32(ordBookingId),
+                    BusinessId = reader.GetInt32(ordBusinessId),
+                    ServiceId = reader.GetInt32(ordServiceId),
+                    CustomerId = reader.GetInt32(ordCustomerId),
+                    StartAtUtc = reader.GetDateTime(ordStart),
+                    EndAtUtc = reader.GetDateTime(ordEnd),
+                    Status = reader.GetString(ordStatus),
+                    Notes = reader.GetString(ordNotes),
                 });
             }
 
@@ -96,7 +163,7 @@ namespace Data.SmartAppt.SQL.Services.Implementation
         {
             await EnsureOpenAsync();
 
-            using var cmd = new SqlCommand("core.Booking_GetAllSpec", (SqlConnection)_connection);
+            using var cmd = new SqlCommand("core.Booking_GetAllSpec", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
 
             cmd.Parameters.Add(new SqlParameter("@BusinessId", SqlDbType.Int) { Value = filter.BusinessId ?? (object)DBNull.Value });
@@ -104,8 +171,8 @@ namespace Data.SmartAppt.SQL.Services.Implementation
             cmd.Parameters.Add(new SqlParameter("@CustomerId", SqlDbType.Int) { Value = filter.CustomerId ?? (object)DBNull.Value });
             cmd.Parameters.Add(new SqlParameter("@Status", SqlDbType.NVarChar, 12) { Value = !string.IsNullOrEmpty(filter.Status) ? filter.Status : DBNull.Value });
             cmd.Parameters.Add(new SqlParameter("@Date", SqlDbType.Date) { Value = filter.Date ?? (object)DBNull.Value });
-            cmd.Parameters.Add(new SqlParameter("@Skip", SqlDbType.Int) { Value = filter.Skip ?? 0 });
-            cmd.Parameters.Add(new SqlParameter("@Take", SqlDbType.Int) { Value = filter.Take ?? 100000 });
+            cmd.Parameters.Add(new SqlParameter("@PageNumber", SqlDbType.Int) { Value = filter.PageNumber ?? 1 });
+            cmd.Parameters.Add(new SqlParameter("@PageSize", SqlDbType.Int) { Value = filter.PageSize ?? 10 });
 
             var bookings = new List<BookingEntity>();
             using var reader = await cmd.ExecuteReaderAsync();
@@ -132,7 +199,7 @@ namespace Data.SmartAppt.SQL.Services.Implementation
         {
             await EnsureOpenAsync();
 
-            using var cmd = new SqlCommand("core.Booking_GetById", (SqlConnection)_connection);
+            using var cmd = new SqlCommand("core.Booking_GetById", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
             cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = bookingId });
 
@@ -160,7 +227,7 @@ namespace Data.SmartAppt.SQL.Services.Implementation
         {
             await EnsureOpenAsync();
 
-            using var cmd = new SqlCommand("core.Booking_SafeUpdate", (SqlConnection)_connection);
+            using var cmd = new SqlCommand("core.Booking_SafeUpdate", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
             cmd.Parameters.Add(new SqlParameter("@BookingId", SqlDbType.Int) { Value = entity.BookingId });
             cmd.Parameters.Add(new SqlParameter("@BusinessId", SqlDbType.Int) { Value = entity.BusinessId });
@@ -177,7 +244,7 @@ namespace Data.SmartAppt.SQL.Services.Implementation
         {
             await EnsureOpenAsync();
 
-            using var cmd = new SqlCommand("core.Booking_GetBookingsCountByBusinessAndRange", (SqlConnection)_connection);
+            using var cmd = new SqlCommand("core.Booking_GetBookingsCountByBusinessAndRange", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
             cmd.Parameters.Add(new SqlParameter("@BusinessId", SqlDbType.Int) { Value = businessId });
             cmd.Parameters.Add(new SqlParameter("@ServiceId", SqlDbType.Int) { Value = serviceId });

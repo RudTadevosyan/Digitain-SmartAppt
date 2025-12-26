@@ -1,4 +1,5 @@
 ﻿using Business.SmartAppt.Models;
+using Business.SmartAppt.Models.BookingModels;
 using Business.SmartAppt.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,66 +16,55 @@ namespace SmartAppt.API.Controllers
             _customerService = customerService;
         }
 
-        private IActionResult GetStatusCodeResult<T>(T result, int code)
-        {
-            return code switch
-            {
-                0 => Ok(result),
-                1 => NotFound(result),
-                2 => BadRequest(result),
-                _ => StatusCode(500, result)
-            };
-        }
         
         [HttpPost("{customerId}/bookings")]
-        public async Task<IActionResult> CreateBooking(int customerId, [FromBody] CreateBookingDto dto)
+        public async Task<IActionResult> CreateBooking(int customerId, [FromBody] CreateBookingModel model)
         {
-            var result = await _customerService.CreateBookingAsync(customerId, dto);
-            return GetStatusCodeResult(result, result.StatusCode);
+            var result = await _customerService.CreateBookingAsync(customerId, model);
+            return StatusCode(result.HttpStatusCode, result);
         }
 
         [HttpPut("{customerId}/bookings/{bookingId}")]
-        public async Task<IActionResult> UpdateBooking(int customerId, int bookingId, [FromBody] UpdateBookingDto dto)
+        public async Task<IActionResult> UpdateBooking(int customerId, int bookingId, [FromBody] UpdateBookingModel model)
         {
-            var result = await _customerService.UpdateBookingAsync(customerId, bookingId, dto);
-            return GetStatusCodeResult(result, result.StatusCode);
+            var result = await _customerService.UpdateBookingAsync(customerId, bookingId, model);
+            return StatusCode(result.HttpStatusCode, result);
         }
 
         [HttpDelete("{customerId}/bookings/{bookingId}")]
         public async Task<IActionResult> DeleteBooking(int customerId, int bookingId)
         {
             var result = await _customerService.DeleteBookingAsync(customerId, bookingId);
-            return GetStatusCodeResult(result, result.StatusCode);
+            return StatusCode(result.HttpStatusCode, result);
         }
 
         [HttpPost("{customerId}/bookings/{bookingId}/cancel")]
         public async Task<IActionResult> CancelBooking(int customerId, int bookingId)
         {
             var result = await _customerService.CancelBookingAsync(customerId, bookingId);
-            return GetStatusCodeResult(result, result.StatusCode);
+            return StatusCode(result.HttpStatusCode, result);
         }
 
         [HttpGet("{customerId}/bookings")]
-        public async Task<IActionResult> GetMyBookings(int customerId, [FromQuery] int skip = 0, [FromQuery] int take = 10)
+        public async Task<IActionResult> GetMyBookings(int customerId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
         {
-            var result = await _customerService.GetMyBookingsAsync(customerId, skip, take);
-            return GetStatusCodeResult(result, result.StatusCode);
+            var result = await _customerService.GetMyBookingsAsync(customerId, pageNumber, pageSize);
+            return StatusCode(result.HttpStatusCode, result);
         }
-
-
+        
         [HttpGet("/api/businesses/{businessId}/services/{serviceId}/calendar/{year}/{month}/{day}/slots")]
         public async Task<IActionResult> GetDailyFreeSlots(int businessId, int serviceId, int year, int month, int day)
         {
             var date = new DateOnly(year, month, day);
             var result = await _customerService.GetDailyFreeSlots(businessId, serviceId, date);
-            return GetStatusCodeResult(result, result.StatusCode);
+            return StatusCode(result.HttpStatusCode, result);
         }
 
         [HttpGet("/api/businesses/{businessId}/services/{serviceId}/calendar/{year}/{month}")]
         public async Task<IActionResult> GetMonthlyCalendar(int businessId, int serviceId, int year, int month)
         {
             var result = await _customerService.GetMonthlyCalendar(businessId, serviceId, month, year);
-            return GetStatusCodeResult(result, result.StatusCode);
+            return StatusCode(result.HttpStatusCode, result);
         }
     }
 }

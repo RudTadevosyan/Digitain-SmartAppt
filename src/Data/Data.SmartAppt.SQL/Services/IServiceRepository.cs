@@ -6,9 +6,11 @@ namespace Data.SmartAppt.SQL.Services
     {
         Task<int> CreateAsync(ServiceEntity service);
         Task<ServiceEntity?> GetByIdAsync(int serviceId);
-        Task<IEnumerable<ServiceEntity>> GetAllAsync(int skip = 0, int take = 10);
+        Task<IEnumerable<ServiceEntity>> GetAllAsync(int pageNumber = 1, int pageSize = 10);
+        Task<IEnumerable<ServiceEntity>> GetByBusinessIdAsync(int businessId);
         Task UpdateAsync(ServiceEntity service);
-        Task DeleteAsync(int serviceid);
-
+        Task DeleteAsync(int serviceId);
+        Task DeactivateAsync(int serviceId);
+        Task ActivateAsync(int serviceId);
     }
 }

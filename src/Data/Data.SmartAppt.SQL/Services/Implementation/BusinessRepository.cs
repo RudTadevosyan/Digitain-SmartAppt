@@ -71,29 +71,38 @@ namespace Data.SmartAppt.SQL.Services.Implementation
             return null;
         }
 
-        public virtual async Task<IEnumerable<BusinessEntity>> GetAllAsync(int skip = 0, int take = 10)
+        public virtual async Task<IEnumerable<BusinessEntity>> GetAllAsync(int pageNumber = 1, int pageSize = 10)
         {
             await EnsureOpenAsync();
 
-            var businesses = new List<BusinessEntity>();
             using var cmd = new SqlCommand("core.Business_GetAll", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
             
-            cmd.Parameters.Add(new SqlParameter("@Skip", SqlDbType.Int) { Value = skip });
-            cmd.Parameters.Add(new SqlParameter("@Take", SqlDbType.Int) { Value = take });
+            cmd.Parameters.Add(new SqlParameter("@PageNumber", SqlDbType.Int) { Value = pageNumber });
+            cmd.Parameters.Add(new SqlParameter("@PageSize", SqlDbType.Int) { Value = pageSize });
 
             using var reader = await cmd.ExecuteReaderAsync();
+            var businesses = new List<BusinessEntity>();
+
+            int ordBusinessId = reader.GetOrdinal("BusinessId");
+            int ordName = reader.GetOrdinal("Name");
+            int ordEmail = reader.GetOrdinal("Email");
+            int ordPhone = reader.GetOrdinal("Phone");
+            int ordTimeZoneIana = reader.GetOrdinal("TimeZoneIana");
+            int ordSettingsJson = reader.GetOrdinal("SettingsJson");
+            int ordCreatedAtUtc = reader.GetOrdinal("CreatedAtUtc");
+            
             while (await reader.ReadAsync())
             {
                 businesses.Add(new BusinessEntity
                 {
-                    BusinessId = reader.GetInt32(reader.GetOrdinal("BusinessId")),
-                    Name = reader.GetString(reader.GetOrdinal("Name")),
-                    Email = reader.IsDBNull(reader.GetOrdinal("Email")) ? null : reader.GetString(reader.GetOrdinal("Email")),
-                    Phone = reader.IsDBNull(reader.GetOrdinal("Phone")) ? null : reader.GetString(reader.GetOrdinal("Phone")),
-                    TimeZoneIana = reader.GetString(reader.GetOrdinal("TimeZoneIana")),
-                    SettingsJson = reader.IsDBNull(reader.GetOrdinal("SettingsJson")) ? null : reader.GetString(reader.GetOrdinal("SettingsJson")),
-                    CreatedAtUtc = reader.GetDateTime(reader.GetOrdinal("CreatedAtUtc"))
+                    BusinessId = reader.GetInt32(ordBusinessId),
+                    Name = reader.GetString(ordName),
+                    Email = reader.IsDBNull(ordEmail) ? null : reader.GetString(ordEmail),
+                    Phone = reader.IsDBNull(ordPhone) ? null : reader.GetString(ordPhone),
+                    TimeZoneIana = reader.GetString(ordTimeZoneIana),
+                    SettingsJson = reader.IsDBNull(ordSettingsJson) ? null : reader.GetString(ordSettingsJson),
+                    CreatedAtUtc = reader.GetDateTime(ordCreatedAtUtc)
                 });
             }
 

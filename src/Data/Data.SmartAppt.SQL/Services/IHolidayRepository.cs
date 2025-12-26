@@ -5,7 +5,7 @@ namespace Data.SmartAppt.SQL.Services
 {
     public interface IHolidayRepository
     {
-        Task<IEnumerable<HolidayEntity>> GetAllAsync(int skip = 0, int take = 10);
+        Task<IEnumerable<HolidayEntity>> GetAllAsync(int pageNumber = 1, int pageSize = 10);
         Task<HolidayEntity?> GetByBusinessIdAsync(int businessId, DateTime date);
         Task<HolidayEntity?> GetByIdAsync(int holidayId);
         Task<int> CreateAsync(HolidayEntity entity);
