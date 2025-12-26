@@ -1,0 +1,730 @@
+﻿using Business.SmartAppt.Models;
+using Business.SmartAppt.Models.BookingModels;
+using Business.SmartAppt.Models.BusinessModels;
+using Business.SmartAppt.Models.HolidayModels;
+using Business.SmartAppt.Models.HoursModels;
+using Business.SmartAppt.Models.ServiceModels;
+using Data.SmartAppt.SQL.Models;
+using Data.SmartAppt.SQL.Services;
+using Data.SmartAppt.SQL.Services.Implementation;
+
+namespace Business.SmartAppt.Services.Implementation
+{
+    public class BusinessService : IBusinessService
+    {
+        protected readonly IBookingRepository BookingRepository;
+        protected readonly IServiceRepository ServiceRepository;
+        protected readonly IBusinessRepository BusinessRepository;
+        protected readonly IOpeningHoursRepository OpeningHoursRepository;
+        protected readonly IHolidayRepository HolidayRepository;
+
+        public BusinessService
+            (IBookingRepository bookingRepository, IServiceRepository serviceRepository, IBusinessRepository businessRepository,
+            IOpeningHoursRepository openingHoursRepository, IHolidayRepository holidayRepository)
+        {
+            BookingRepository = bookingRepository;
+            ServiceRepository = serviceRepository;
+            BusinessRepository = businessRepository;
+            OpeningHoursRepository = openingHoursRepository;
+            HolidayRepository = holidayRepository;
+        }
+
+
+        public virtual async Task<BaseResponse<BusinessModel>> CreateBusinessAsync(CreateBusinessModel business)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(business.Name))
+                    return new BaseResponse<BusinessModel> {HttpStatusCode = 400, Message = "Name is required"};
+                
+                if (string.IsNullOrWhiteSpace(business.Name))
+                    return new BaseResponse<BusinessModel> {HttpStatusCode = 400, Message = "TimeZone is required"};
+                
+                BusinessEntity b = new BusinessEntity
+                {
+                    Name = business.Name,
+                    Email = business.Email,
+                    Phone = business.Phone,
+                    TimeZoneIana = business.TimeZoneIana,
+                    SettingsJson = business.SettingsJson,
+                };
+                
+                int id = await BusinessRepository.CreateAsync(b);
+
+                return new BaseResponse<BusinessModel>
+                {
+                    Data = new BusinessModel
+                    {
+                        BusinessId = id,
+                        Name = business.Name,
+                        Email = business.Email,
+                        Phone = business.Phone,
+                        TimeZoneIana = business.TimeZoneIana,
+                        SettingsJson = business.SettingsJson,
+                    },
+                    HttpStatusCode = 200,
+                };
+            }
+            catch(Exception ex)
+            {
+                return new BaseResponse<BusinessModel> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> UpdateBusinessAsync(int businessId, UpdateBusinessModel business)
+        {
+            try
+            {
+                var existing = await BusinessRepository.GetByIdAsync(businessId);
+                if(existing == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Business with {businessId} id not found" };
+                
+                existing.Name = business.Name ?? existing.Name;
+                existing.Email = business.Email ?? existing.Email;
+                existing.Phone = business.Phone ?? existing.Phone;
+                existing.TimeZoneIana = business.TimeZoneIana?? existing.TimeZoneIana;
+                existing.SettingsJson = business.SettingsJson ?? existing.SettingsJson;
+                
+                await BusinessRepository.UpdateAsync(existing);
+                return new BaseResponse<bool> { Data = true, HttpStatusCode = 200 , Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> DeleteBusinessAsync(int businessId)
+        {
+            try
+            {
+                var existing = await BusinessRepository.GetByIdAsync(businessId);
+                if(existing == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Business with {businessId} id not found" };
+                
+                await BusinessRepository.DeleteAsync(businessId);
+                return new BaseResponse<bool> { Data = true, HttpStatusCode = 200 , Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<BusinessModel>> GetMyBusinessAsync(int businessId)
+        {
+            try
+            {
+                var business = await BusinessRepository.GetByIdAsync(businessId);
+                if (business == null)
+                    return new BaseResponse<BusinessModel> { HttpStatusCode = 404, Message = $"Business with {businessId} id not found" };
+
+                return new BaseResponse<BusinessModel>
+                {
+                    Data = new BusinessModel
+                    {
+                        BusinessId = business.BusinessId,
+                        Name = business.Name,
+                        Email = business.Email,
+                        Phone = business.Phone,
+                        TimeZoneIana = business.TimeZoneIana,
+                        SettingsJson = business.SettingsJson,
+                    },
+                    HttpStatusCode = 200,
+                };
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<BusinessModel>  { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<ServiceModel>> AddServiceAsync(int businessId, CreateServiceModel service)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(service.Name))
+                    return new BaseResponse<ServiceModel> { HttpStatusCode = 400, Message = "Name is required" };
+
+                if (service.DurationMin < 5)
+                    return new BaseResponse<ServiceModel> {HttpStatusCode = 404, Message = "Service duration must be at least 5 minutes"};
+                
+                if (service.Price < 0)
+                    return new BaseResponse<ServiceModel> { HttpStatusCode = 400, Message = "Price must be positive"};
+                
+                var business = await BusinessRepository.GetByIdAsync(businessId);
+                if (business == null)
+                    return new BaseResponse<ServiceModel> { HttpStatusCode = 404, Message = $"Business with {businessId} id not found" };
+                
+                ServiceEntity s = new ServiceEntity
+                {
+                    BusinessId = businessId,
+                    Name = service.Name,
+                    DurationMin = service.DurationMin,
+                    Price = service.Price,
+                    IsActive = service.IsActive,
+                };
+
+                int id = await ServiceRepository.CreateAsync(s);
+
+                return new BaseResponse<ServiceModel>
+                {
+                    Data = new ServiceModel
+                    {
+                        ServiceId = id,
+                        BusinessId = businessId,
+                        Name = service.Name,
+                        DurationMin = service.DurationMin,
+                        Price = service.Price,
+                        IsActive = service.IsActive,
+                    },
+                    HttpStatusCode = 200
+                };
+
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<ServiceModel> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> UpdateServiceAsync(int businessId, int serviceId, UpdateServiceModel service)
+        {
+            try
+            {
+                if (service.DurationMin < 5)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = "Duration must be at least 5 minutes" };
+                
+                if (service.Price < 0)
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Price cannot be negative" };
+                
+                var existing = await ServiceRepository.GetByIdAsync(serviceId);
+                if (existing == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Service with {serviceId} id not found" };
+                
+                if (existing.BusinessId != businessId)
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = $"Service with business {businessId} id does not match" };
+                
+                existing.Name = service.Name ?? existing.Name;
+                existing.DurationMin = service.DurationMin;
+                existing.Price = service.Price;
+                
+                await ServiceRepository.UpdateAsync(existing);
+                return new BaseResponse<bool> { Data = true, HttpStatusCode = 200 , Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> DeleteServiceAsync(int businessId, int serviceId)
+        {
+            try
+            {
+                var existing = await ServiceRepository.GetByIdAsync(serviceId);
+                if (existing == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Service with {serviceId} id not found" };
+                
+                if (existing.BusinessId != businessId)
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = $"Service with business {businessId} id does not match" };
+                
+                await ServiceRepository.DeleteAsync(serviceId);
+                return new BaseResponse<bool> { Data = true, HttpStatusCode = 200 , Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> ActivateServiceAsync(int businessId, int serviceId)
+        {
+            try
+            {
+                var existing = await ServiceRepository.GetByIdAsync(serviceId);
+                if (existing == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Service with {serviceId} id not found" };
+                
+                if (existing.BusinessId != businessId)
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = $"Service with business {businessId} id does not match" };
+                
+                if (existing.IsActive)
+                    return new BaseResponse<bool> {HttpStatusCode = 400, Message = $"Service is already activated" };
+                
+                await ServiceRepository.ActivateAsync(serviceId);
+                
+                return new BaseResponse<bool> { Data = true, HttpStatusCode = 200 , Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool>
+                {
+                    HttpStatusCode = 500,
+                    Message = ex.Message,
+                };
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> DeactivateServiceAsync(int businessId, int serviceId)
+        {
+            try
+            {
+                var existing = await ServiceRepository.GetByIdAsync(serviceId);
+                if (existing == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Service with {serviceId} id not found" };
+                
+                if (existing.BusinessId != businessId)
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = $"Service with business {businessId} id does not match" };
+                
+                if (!existing.IsActive)
+                    return new BaseResponse<bool> {HttpStatusCode = 400, Message = $"Service is already deactivated" };
+                
+                await ServiceRepository.DeactivateAsync(serviceId);
+                
+                return new BaseResponse<bool> { Data = true, HttpStatusCode = 200 , Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<IEnumerable<ServiceModel>>> GetMyServicesAsync(int businessId)
+        {
+            try
+            {
+                var business = await BusinessRepository.GetByIdAsync(businessId);
+                if (business == null)
+                    return new BaseResponse<IEnumerable<ServiceModel>> { HttpStatusCode = 404, Message = $"Business with {businessId} id not found" };
+                
+                var services = await ServiceRepository.GetByBusinessIdAsync(businessId);
+                
+                List<ServiceModel> servicesList = new List<ServiceModel>();
+
+                foreach (var s in services)
+                {
+                    servicesList.Add(new ServiceModel
+                    {
+                        ServiceId = s.ServiceId,
+                        BusinessId = businessId,
+                        Name = s.Name,
+                        DurationMin = s.DurationMin,
+                        Price = s.Price,
+                        IsActive = s.IsActive,
+                    });
+                }
+
+                return new BaseResponse<IEnumerable<ServiceModel>>
+                {
+                    Data = servicesList,
+                    HttpStatusCode = 200,
+                };
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<IEnumerable<ServiceModel>> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<HoursModel>> AddOpeningHoursAsync(int businessId, CreateHoursModel hours)
+        {
+            try
+            {
+                if (hours.DayOfWeek < 1 || hours.DayOfWeek > 7) 
+                    return new  BaseResponse<HoursModel> { HttpStatusCode = 400, Message = "DayOfWeek must be between 1 and 7" };
+
+                if (hours.CloseTime - hours.OpenTime < TimeSpan.FromMinutes(60))
+                    return new  BaseResponse<HoursModel> { HttpStatusCode = 400, Message = "Business must be open at least 1 hour" };
+                
+                var business = await BusinessRepository.GetByIdAsync(businessId);
+                if (business == null)
+                    return new  BaseResponse<HoursModel> { HttpStatusCode = 404, Message = $"Business with business {businessId} id not found" };
+
+                OpeningHoursEntity o = new OpeningHoursEntity
+                {
+                    BusinessId = businessId,
+                    DayOfWeek = hours.DayOfWeek,
+                    OpenTime = hours.OpenTime,
+                    CloseTime = hours.CloseTime,
+                };
+                
+                var existing = await OpeningHoursRepository.GetByBusinessIdAndDowAsync(businessId, hours.DayOfWeek);
+                if (existing != null)
+                    return new BaseResponse<HoursModel>
+                    {
+                        HttpStatusCode = 400,
+                        Message = "Opening hours for this day already exist for this business"
+                    };
+
+                int id = await OpeningHoursRepository.CreateAsync(o);
+
+                return new BaseResponse<HoursModel>
+                {
+                    Data = new HoursModel
+                    {
+                        OpeningHoursId = id,
+                        BusinessId = businessId,
+                        DayOfWeek = hours.DayOfWeek,
+                        OpenTime = hours.OpenTime,
+                        CloseTime = hours.CloseTime,
+                    },
+                    HttpStatusCode = 200,
+                };
+            }
+            catch (Exception ex)
+            {
+                return new  BaseResponse<HoursModel> {HttpStatusCode = 500, Message = ex.Message};
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> UpdateOpeningHoursAsync(int businessId, byte dow, UpdateHoursModel hours)
+        {
+            try
+            {
+                if (dow < 1 || dow > 7) 
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "DayOfWeek must be between 1 and 7" };
+                
+                if (hours.CloseTime - hours.OpenTime < TimeSpan.FromMinutes(60))
+                    return new  BaseResponse<bool> { HttpStatusCode = 400, Message = "Business must be open at least 1 hour" };
+
+                var existing = await OpeningHoursRepository.GetByBusinessIdAndDowAsync(businessId, dow);
+                if (existing == null)
+                    return new BaseResponse<bool> {HttpStatusCode = 404,
+                        Message = $"Business with business {businessId} id not found or there is no opening hours for this {dow} day of week"};
+                
+                existing.OpenTime = hours.OpenTime;
+                existing.CloseTime = hours.CloseTime;
+                
+                await OpeningHoursRepository.UpdateAsync(existing);
+                return new BaseResponse<bool> {Data = true, HttpStatusCode = 200, Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> DeleteOpeningHoursAsync(int businessId, byte dow)
+        {
+            try
+            {
+                if (dow < 1 || dow > 7) 
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "DayOfWeek must be between 1 and 7" };
+                
+                var existing = await OpeningHoursRepository.GetByBusinessIdAndDowAsync(businessId, dow);
+                if (existing == null)
+                    return new BaseResponse<bool> {HttpStatusCode = 404,
+                        Message = $"Business with business {businessId} id not found or there is no opening hours for this {dow} day of week"};
+                
+                await OpeningHoursRepository.DeleteAsync(existing.OpeningHoursId);
+                return new BaseResponse<bool> {Data = true, HttpStatusCode = 200, Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<IEnumerable<HoursModel>>> GetMyOpeningHoursAsync(int businessId)
+        {
+            try
+            {
+                var hours = await OpeningHoursRepository.GetByBusinessIdAsync(businessId);
+                List<HoursModel> hoursList = new List<HoursModel>();
+                
+                foreach (var h in hours)
+                {
+                    hoursList.Add(new HoursModel
+                    {
+                        OpeningHoursId = h.OpeningHoursId,
+                        BusinessId = h.BusinessId,
+                        DayOfWeek = h.DayOfWeek,
+                        OpenTime = h.OpenTime,
+                        CloseTime = h.CloseTime,
+                    });
+                }
+
+                return new BaseResponse<IEnumerable<HoursModel>>
+                {
+                    Data = hoursList,
+                    HttpStatusCode = 200,
+                };
+
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<IEnumerable<HoursModel>> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<HolidayModel>> AddHolidayAsync(int businessId, CreateHolidayModel holiday)
+        {
+            try
+            {
+                if (holiday.HolidayDate.Date <= DateTime.UtcNow.Date)
+                    return new BaseResponse<HolidayModel> { HttpStatusCode = 400, Message = "Holiday date cannot be in the past" };
+                
+                var business = await BusinessRepository.GetByIdAsync(businessId);
+                if (business == null)
+                    return new BaseResponse<HolidayModel>{ HttpStatusCode = 404, Message = $"Business with {businessId} id not found" };
+
+                HolidayEntity h = new HolidayEntity
+                {
+                    BusinessId = business.BusinessId,
+                    HolidayDate = holiday.HolidayDate,
+                    Reason = holiday.Reason,
+                };
+            
+                int id = await HolidayRepository.CreateAsync(h);
+
+                return new BaseResponse<HolidayModel>
+                {
+                    Data = new HolidayModel
+                    {
+                        HolidayId = id,
+                        BusinessId = business.BusinessId,
+                        HolidayDate = holiday.HolidayDate.Date,
+                        Reason = holiday.Reason,
+                    },
+                    HttpStatusCode = 200
+                };
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<HolidayModel> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> DeleteHolidayAsync(int businessId, int holidayId)
+        {
+            try
+            {
+                var existing = await HolidayRepository.GetByIdAsync(holidayId);
+                if (existing == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Holiday with holiday {holidayId} id not found" };
+                
+                if (existing.BusinessId != businessId)
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "BusinessId with holiday id does not match" };
+                
+                await HolidayRepository.DeleteAsync(holidayId);
+                
+                return new BaseResponse<bool> {Data = true, HttpStatusCode = 200, Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+        
+        public virtual async Task<BaseResponse<IEnumerable<BookingModel>>> GetCurrentActiveBookings(int businessId, int pageNumber = 1, int pageSize = 10)
+        {
+            try
+            {
+                if (pageNumber < 1)
+                    pageNumber = 1;
+            
+                if (pageSize < 1)
+                    pageSize = 10;
+            
+                if(pageSize > 100)
+                    pageSize = 100;
+                
+                var business = await BusinessRepository.GetByIdAsync(businessId);
+                if (business == null)
+                    return new BaseResponse<IEnumerable<BookingModel>> { HttpStatusCode = 404, Message = $"Business with business {businessId} id not found" };
+
+                BookingFilter filter = new BookingFilter
+                {
+                    BusinessId = business.BusinessId,
+                    Status = "Confirmed",
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+
+                var bookings = await BookingRepository.GetAllSpecAsync(filter);
+                
+                List<BookingModel> bookingsList = new List<BookingModel>();
+
+                foreach (var b in bookings)
+                {
+                    bookingsList.Add(new BookingModel
+                    {
+                        BookingId = b.BookingId,
+                        BusinessId = b.BusinessId,
+                        ServiceId = b.ServiceId,
+                        CustomerId = b.CustomerId,
+                        StartAtUtc = b.StartAtUtc,
+                        EndAtUtc = b.EndAtUtc,
+                        Status = b.Status,
+                        Notes = b.Notes,
+                    });
+                }
+
+                return new BaseResponse<IEnumerable<BookingModel>>
+                {
+                    Data = bookingsList,
+                    HttpStatusCode = 200,
+                };
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<IEnumerable<BookingModel>> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+        
+        public virtual async Task<BaseResponse<IEnumerable<BookingModel>>> GetDailyBookingsAsync(int businessId, DateTime date, int pageNumber = 1, int pageSize = 10)
+        {
+            try
+            {
+                if (pageNumber < 1)
+                    pageNumber = 1;
+            
+                if (pageSize < 1)
+                    pageSize = 10;
+            
+                if(pageSize > 100)
+                    pageSize = 100;
+                
+                var business = await BusinessRepository.GetByIdAsync(businessId);
+                if (business == null)
+                    return new BaseResponse<IEnumerable<BookingModel>> { HttpStatusCode = 404, Message = $"Business with business {businessId} id not found" };
+                
+                // monday=1..sunday=7
+                byte dow = (byte)(((int)date.DayOfWeek + 6) % 7 + 1);
+
+                var hours = await OpeningHoursRepository.GetByBusinessIdAndDowAsync(businessId, dow);
+                if (hours == null)
+                    return new BaseResponse<IEnumerable<BookingModel>> { HttpStatusCode = 400, Message = $"Business doesn't have opening hours for the {dow} day of week"};
+
+                DateTime day = date.Date;
+
+                DateTime fromUtc = day.Add(hours.OpenTime);
+                DateTime toUtc;
+
+                if (hours.CloseTime == hours.OpenTime)
+                {
+                    // 24-hour open
+                    toUtc = fromUtc.AddDays(1);
+                }
+                else if (hours.CloseTime > hours.OpenTime)
+                {
+                    // Normal same-day hours
+                    toUtc = date.Date.Add(hours.CloseTime);
+                }
+                else
+                {
+                    // Overnight hours
+                    toUtc = date.Date.Add(hours.CloseTime).AddDays(1);
+                }
+                
+                var bookings = await BookingRepository.GetBookingsByRangeAsync(businessId, fromUtc, toUtc, pageNumber, pageSize);
+                
+                List<BookingModel> bookingsList = new List<BookingModel>();
+
+                foreach (var b in bookings)
+                {
+                    bookingsList.Add(new BookingModel
+                    {
+                        BookingId = b.BookingId,
+                        BusinessId = b.BusinessId,
+                        ServiceId = b.ServiceId,
+                        CustomerId = b.CustomerId,
+                        StartAtUtc = b.StartAtUtc,
+                        EndAtUtc = b.EndAtUtc,
+                        Status = b.Status,
+                        Notes = b.Notes,
+                    });
+                }
+                
+                return new BaseResponse<IEnumerable<BookingModel>>
+                {
+                    Data = bookingsList,
+                    HttpStatusCode = 200,
+                };
+                
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<IEnumerable<BookingModel>> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> ConfirmBookingAsync(int businessId, int bookingId)
+        {
+            try
+            {
+                var business = await BusinessRepository.GetByIdAsync(businessId);
+                if (business == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Business with {businessId} id not found" };
+                
+                var booking = await BookingRepository.GetByIdAsync(bookingId);
+                if (booking == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Booking with {bookingId} id not found" };
+
+                if (booking.BusinessId != business.BusinessId)
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Booking is not for that Business" };
+                
+                if (booking.Status == "Confirmed")
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Booking is already confirmed" };
+                
+                if (booking.Status == "Cancelled")
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Booking is already cancelled" };
+                
+                BookingFilter filter = new BookingFilter
+                {
+                    BusinessId = businessId,
+                    Date = booking.StartAtUtc,
+                    Status = "Pending",
+                };
+                var otherBookings = await BookingRepository.GetAllSpecAsync(filter);
+
+                foreach (var b in otherBookings)
+                {
+                    if (b.BookingId != bookingId)
+                    {
+                        await BookingRepository.ChangeBookingStatusAsync(b.BookingId, "Cancelled");
+                    }
+                }
+                
+                await BookingRepository.ChangeBookingStatusAsync(bookingId, "Confirmed");
+                return new BaseResponse<bool> {Data = true, HttpStatusCode = 200, Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+
+        public virtual async Task<BaseResponse<bool>> CancelBookingAsync(int businessId, int bookingId)
+        {
+            try
+            {
+                var business = await BusinessRepository.GetByIdAsync(businessId);
+                if (business == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Business with {businessId} id not found" };
+                
+                var booking = await BookingRepository.GetByIdAsync(bookingId);
+                if (booking == null)
+                    return new BaseResponse<bool> { HttpStatusCode = 404, Message = $"Booking with {bookingId} id not found" };
+
+                if (booking.BusinessId != business.BusinessId)
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Booking is not for that Business" };
+                
+                if (booking.Status == "Confirmed")
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Booking is already confirmed" };
+                
+                if (booking.Status == "Cancelled")
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Booking is already cancelled" };
+                
+                await BookingRepository.CancelAsync(bookingId);
+
+                return new BaseResponse<bool> {Data = true, HttpStatusCode = 200, Message = "Success"};
+            }
+            catch (Exception ex)
+            {
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
+            }
+        }
+    }
+}

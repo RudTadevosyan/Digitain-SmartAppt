@@ -50,27 +50,34 @@ namespace Data.SmartAppt.SQL.Services.Implementation
             await cmd.ExecuteNonQueryAsync();
         }
 
-        public virtual async Task<IEnumerable<OpeningHoursEntity>> GetAllAsync(int skip = 0, int take = 10)
+        public virtual async Task<IEnumerable<OpeningHoursEntity>> GetAllAsync(int pageNumber = 1, int pageSize = 10)
         {
             await EnsureOpenAsync();
 
-            var list = new List<OpeningHoursEntity>();
             using var cmd = new SqlCommand("core.OpeningHours_GetAll", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
 
-            cmd.Parameters.Add(new SqlParameter("@Skip", SqlDbType.Int) { Value = skip });
-            cmd.Parameters.Add(new SqlParameter("@Take", SqlDbType.Int) { Value = take });
+            cmd.Parameters.Add(new SqlParameter("@PageNumber", SqlDbType.Int) { Value = pageNumber });
+            cmd.Parameters.Add(new SqlParameter("@PageSize", SqlDbType.Int) { Value = pageSize });
 
             using var reader = await cmd.ExecuteReaderAsync();
+            var list = new List<OpeningHoursEntity>();
+            
+            int ordOpeningHoursId = reader.GetOrdinal("OpeningHoursId");
+            int ordBusinessId = reader.GetOrdinal("BusinessId");
+            int ordDayOfWeek = reader.GetOrdinal("DayOfWeek");
+            int ordOpenTime = reader.GetOrdinal("OpenTime");
+            int ordCloseTime = reader.GetOrdinal("CloseTime");
+            
             while (await reader.ReadAsync())
             {
                 list.Add(new OpeningHoursEntity
                 {
-                    OpeningHoursId = reader.GetInt32(reader.GetOrdinal("OpeningHoursId")),
-                    BusinessId = reader.GetInt32(reader.GetOrdinal("BusinessId")),
-                    DayOfWeek = reader.GetByte(reader.GetOrdinal("DayOfWeek")),
-                    OpenTime = reader.GetTimeSpan(reader.GetOrdinal("OpenTime")),
-                    CloseTime = reader.GetTimeSpan(reader.GetOrdinal("CloseTime"))
+                    OpeningHoursId = reader.GetInt32(ordOpeningHoursId),
+                    BusinessId = reader.GetInt32(ordBusinessId),
+                    DayOfWeek = reader.GetByte(ordDayOfWeek),
+                    OpenTime = reader.GetTimeSpan(ordOpenTime),
+                    CloseTime = reader.GetTimeSpan(ordCloseTime)
                 });
             }
 

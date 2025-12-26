@@ -1,7 +1,7 @@
 ﻿using Business.SmartAppt.Models;
+using Business.SmartAppt.Models.BookingModels;
 using Data.SmartAppt.SQL.Models;
 using Data.SmartAppt.SQL.Services;
-using Data.SmartAppt.SQL.Services.Implementation;
 
 namespace Business.SmartAppt.Services.Implementation
 {
@@ -24,41 +24,65 @@ namespace Business.SmartAppt.Services.Implementation
             HolidayRepository = holidayRepository;
         }
 
-        public virtual async Task<ResponseBase> CancelBookingAsync(int customerId, int bookingId)
+        public virtual async Task<BaseResponse<bool>> CancelBookingAsync(int customerId, int bookingId)
         {
             try
             {
                 var booking = await BookingRepository.GetByIdAsync(bookingId);
                 if (booking == null)
                 {
-                    return new ResponseBase { StatusCode = 1, ErrorMessage = $"Booking with {bookingId} id not found" };
+                    return new BaseResponse<bool>
+                    {
+                        Data = false,
+                        HttpStatusCode = 404, 
+                        Message = $"Booking with {bookingId} id not found"
+                    };
                 }
                 
                 var customer = await CustomerRepository.GetByIdAsync(customerId);
                 if (customer == null)
-                    return new ResponseBase {StatusCode = 1, ErrorMessage = $"Customer {customerId} not found"};
+                    return new BaseResponse<bool>
+                    {
+                        Data = false,
+                        HttpStatusCode = 404, 
+                        Message = $"Customer {customerId} not found"
+                    };
 
                 if (booking.CustomerId != customerId)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "You don't have permissions for this booking" };
+                    return new BaseResponse<bool>
+                    {
+                        Data = false,
+                        HttpStatusCode = 400, 
+                        Message = "You don't have permissions for this booking"
+                    };
 
                 await BookingRepository.CancelAsync(bookingId);
-                return new ResponseBase { StatusCode = 0 };
+                return new BaseResponse<bool> { Data = true, HttpStatusCode = 200 , Message = "Success"};
             }
             catch (Exception ex)
             {
-                return new ResponseBase { StatusCode = 5, ErrorMessage = ex.Message };
+                return new BaseResponse<bool>
+                {
+                    Data = false,
+                    HttpStatusCode = 500, 
+                    Message = ex.Message
+                };
             }
 
         }
 
-        public virtual async Task<ResponseBase> CreateBookingAsync(int customerId, CreateBookingDto booking)
+        public virtual async Task<BaseResponse<BookingModel>> CreateBookingAsync(int customerId, CreateBookingModel booking)
         {
             try
             {
                 // check the date 
                 if (booking.StartAtUtc <= DateTime.UtcNow)
                 {
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Cant book for previous date"};
+                    return new BaseResponse<BookingModel>
+                    {
+                        HttpStatusCode = 400, 
+                        Message = "Cant book for previous date"
+                    };
                 }
                 
                 // Round the milliseconds
@@ -68,22 +92,22 @@ namespace Business.SmartAppt.Services.Implementation
                 // Check business, service, customer
                 var customer = await CustomerRepository.GetByIdAsync(customerId);
                 if (customer == null)
-                    return new ResponseBase { StatusCode = 1, ErrorMessage = $"Customer with ID {customerId} not found" };
+                    return new BaseResponse<BookingModel> { HttpStatusCode = 404, Message = $"Customer with ID {customerId} not found" };
 
                 var business = await BusinessRepository.GetByIdAsync(booking.BusinessId);
                 if (business == null)
-                    return new ResponseBase { StatusCode = 1, ErrorMessage = $"Business with ID {booking.BusinessId} not found" };
+                    return new BaseResponse<BookingModel> { HttpStatusCode = 404, Message = $"Business with ID {booking.BusinessId} not found" };
 
                 var service = await ServiceRepository.GetByIdAsync(booking.ServiceId);
                 if (service == null)
-                    return new ResponseBase { StatusCode = 1, ErrorMessage = $"Service with ID {booking.ServiceId} not found" };
+                    return new BaseResponse<BookingModel> { HttpStatusCode = 404, Message = $"Service with ID {booking.ServiceId} not found" };
 
                 // check 
                 if (service.BusinessId != business.BusinessId)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Business doesnt have that service" };
+                    return new BaseResponse<BookingModel> { HttpStatusCode = 400, Message = "Business doesnt have that service" };
 
                 if (!service.IsActive)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Service is not active" };
+                    return new BaseResponse<BookingModel> { HttpStatusCode = 400, Message = "Service is not active" };
 
                 // determine the ending time
                 var endAtUtc = booking.StartAtUtc.AddMinutes(service.DurationMin);
@@ -91,24 +115,24 @@ namespace Business.SmartAppt.Services.Implementation
                 // check date for holidays
                 var holiday = await HolidayRepository.GetByBusinessIdAsync(booking.BusinessId, booking.StartAtUtc.Date);
                 if (holiday != null)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = $"It's a holiday {holiday.Reason}" };
+                    return new BaseResponse<BookingModel> { HttpStatusCode = 400, Message = $"It's a holiday" };
 
                 byte dow = (byte)(((int)booking.StartAtUtc.DayOfWeek + 6) % 7 + 1);  // monday = 1, sunday = 7
 
                 var hours = await OpeningHoursRepository.GetByBusinessIdAndDowAsync(booking.BusinessId, dow);
                 if (hours == null)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "This business has no opening hours for this day." };
+                    return new BaseResponse<BookingModel> { HttpStatusCode = 400, Message = "This business has no opening hours for this day." };
 
                 var openAt = booking.StartAtUtc.Date + hours.OpenTime; // Date + Time
                 var closeAt = booking.StartAtUtc.Date + hours.CloseTime;
 
                 // Check if the business is open
                 if (booking.StartAtUtc < openAt || endAtUtc > closeAt)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Business is not open at this time." };
+                    return new BaseResponse<BookingModel> { HttpStatusCode = 400, Message = "Business is not open at this time." };
 
 
                 if ((booking.StartAtUtc.TimeOfDay - hours.OpenTime).TotalMinutes % service.DurationMin != 0)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Booking must start on service-aligned slot" };
+                    return new BaseResponse<BookingModel> { HttpStatusCode = 400, Message = "Booking must start on service-aligned slot" };
                 
                 
                 // check if the customer has same booking as a pending to not allow double booking
@@ -123,7 +147,7 @@ namespace Business.SmartAppt.Services.Implementation
 
                 int count = clientBooking.Count();
                 if (count > 0)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "You have already booking for that day" };
+                    return new BaseResponse<BookingModel> { HttpStatusCode = 400, Message = "You have already booking for that day" };
 
 
                 // Check the Business's services booking for that day
@@ -139,7 +163,7 @@ namespace Business.SmartAppt.Services.Implementation
                 foreach (var b in existing)
                 {
                     if (b.StartAtUtc == booking.StartAtUtc)
-                        return new ResponseBase { StatusCode = 2, ErrorMessage = "Time overlaps with an existing booking." };
+                        return new BaseResponse<BookingModel> { HttpStatusCode = 400, Message = "Time overlaps with an existing booking." };
                 }
 
                 var entity = new BookingEntity
@@ -155,7 +179,7 @@ namespace Business.SmartAppt.Services.Implementation
 
                 int id = await BookingRepository.CreateAsync(entity);
 
-                return new BookingDto
+                BookingModel bm = new BookingModel
                 {
                     BookingId = id,
                     BusinessId = booking.BusinessId,
@@ -165,67 +189,80 @@ namespace Business.SmartAppt.Services.Implementation
                     StartAtUtc = booking.StartAtUtc,
                     EndAtUtc = endAtUtc,
                     Status = booking.Status,
-                    StatusCode = 0
+                };
+
+                return new BaseResponse<BookingModel>
+                {
+                    Data = bm,
+                    HttpStatusCode = 200
                 };
             }
             catch (Exception ex)
             {
-                return new ResponseBase { StatusCode = 5, ErrorMessage = ex.Message };
+                return new BaseResponse<BookingModel> { HttpStatusCode = 500, Message = ex.Message };
             }
         }
 
-        public virtual async Task<ResponseBase> DeleteBookingAsync(int customerId, int bookingId)
+        public virtual async Task<BaseResponse<bool>> DeleteBookingAsync(int customerId, int bookingId)
         {
             try
             {
                 var booking = await BookingRepository.GetByIdAsync(bookingId);
                 if (booking == null)
                 {
-                    return new ResponseBase { StatusCode = 1, ErrorMessage = $"Booking with {bookingId} id not found" };
+                    return new BaseResponse<bool>
+                    {
+                        Data = false,
+                        HttpStatusCode = 404, 
+                        Message = $"Booking with {bookingId} id not found"
+                    };
                 }
                 
                 var customer = await CustomerRepository.GetByIdAsync(customerId);
                 if (customer == null)
-                    return new ResponseBase {StatusCode = 1, ErrorMessage = $"Customer {customerId} not found"};
+                    return new BaseResponse<bool> {Data = false, HttpStatusCode = 404, Message = $"Customer {customerId} not found"};
 
                 if (booking.CustomerId != customerId)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "You don't have permissions for this booking" };
+                    return new BaseResponse<bool> { Data = false, HttpStatusCode = 400, Message = "You don't have permissions for this booking" };
                 
                 await BookingRepository.DeleteAsync(bookingId);
-                return new ResponseBase { StatusCode = 0 };
+                return new BaseResponse<bool> { Data = true, HttpStatusCode = 200 , Message = "Success"};
             }
             catch (Exception ex)
             {
-                return new ResponseBase { StatusCode = 5, ErrorMessage = ex.Message };
+                return new BaseResponse<bool> {Data = false, HttpStatusCode = 500, Message = ex.Message };
             }
         }
 
-        public virtual async Task<ResponseBase> GetDailyFreeSlots(int businessId, int serviceId, DateOnly date)
+        public virtual async Task<BaseResponse<DailySlotsModel>> GetDailyFreeSlots(int businessId, int serviceId, DateOnly date)
         {
             try
             {
                 // checking basic requirements
                 var business = await BusinessRepository.GetByIdAsync(businessId);
                 if (business == null)
-                    return new ResponseBase { StatusCode = 1, ErrorMessage = $"Business with ID {businessId} not found" };
+                    return new BaseResponse<DailySlotsModel> { HttpStatusCode = 404, Message = $"Business with ID {businessId} not found" };
 
                 var service = await ServiceRepository.GetByIdAsync(serviceId);
                 if (service == null)
-                    return new ResponseBase { StatusCode = 1, ErrorMessage = $"Service with ID {serviceId} not found" };
+                    return new BaseResponse<DailySlotsModel> { HttpStatusCode = 404, Message = $"Service with ID {serviceId} not found" };
 
                 if (service.BusinessId != businessId)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Business doesn't have that service" };
+                    return new BaseResponse<DailySlotsModel> { HttpStatusCode = 400, Message = "Business doesn't have that service" };
 
                 if (!service.IsActive)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Service is not active" };
+                    return new BaseResponse<DailySlotsModel>() { HttpStatusCode = 400, Message = "Service is not active" };
                 
                 var holiday = await HolidayRepository.GetByBusinessIdAsync(businessId, new DateTime(date.Year, date.Month, date.Day));
                 if (holiday != null)
                 {
-                    return new DailySlotsDto
+                    return new BaseResponse<DailySlotsModel>
                     {
-                        Date = date,
-                        StatusCode = 2
+                        Data = new DailySlotsModel
+                        {
+                            Date = date,
+                        },
+                        HttpStatusCode = 400
                     };
                 }
                 
@@ -234,10 +271,14 @@ namespace Business.SmartAppt.Services.Implementation
                 var hours = await OpeningHoursRepository.GetByBusinessIdAndDowAsync(businessId, dow);
                 if (hours == null)
                 {
-                    return new DailySlotsDto
+                    
+                    return new BaseResponse<DailySlotsModel>
                     {
-                        Date = date,
-                        StatusCode = 2
+                        Data = new DailySlotsModel
+                        {
+                            Date = date,
+                        },
+                        HttpStatusCode = 400
                     };
                 }
 
@@ -267,40 +308,45 @@ namespace Business.SmartAppt.Services.Implementation
                     slotTime += duration;
                 }
 
-                return new DailySlotsDto
+                DailySlotsModel dm =  new DailySlotsModel
                 {
                     Date = date,
                     FreeSlots = freeSlots,
-                    StatusCode = 0
+                };
+
+                return new BaseResponse<DailySlotsModel>
+                {
+                    Data = dm,
+                    HttpStatusCode = 200
                 };
             }
             catch (Exception ex)
             {
-                return new ResponseBase()
+                return new BaseResponse<DailySlotsModel>
                 {
-                    StatusCode = 5,
-                    ErrorMessage = ex.Message
+                    HttpStatusCode = 500,
+                    Message = ex.Message
                 };
             }
         }
 
-        public virtual async Task<ResponseBase> GetMonthlyCalendar(int businessId, int serviceId, int month, int year)
+        public virtual async Task<BaseResponse<CalendarModel>> GetMonthlyCalendar(int businessId, int serviceId, int month, int year)
         {
             try
             { 
                 var business = await BusinessRepository.GetByIdAsync(businessId);
                 if (business == null)
-                    return new ResponseBase { StatusCode = 1, ErrorMessage = $"Business with ID {businessId} not found" };
+                    return new BaseResponse<CalendarModel> { HttpStatusCode = 404, Message = $"Business with ID {businessId} not found" };
 
                 var service = await ServiceRepository.GetByIdAsync(serviceId);
                 if (service == null)
-                    return new ResponseBase { StatusCode = 1, ErrorMessage = $"Service with ID {serviceId} not found" };
+                    return new BaseResponse<CalendarModel> { HttpStatusCode = 404, Message = $"Service with ID {serviceId} not found" };
 
                 if (service.BusinessId != businessId)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Business doesn't have that service" };
+                    return new BaseResponse<CalendarModel> { HttpStatusCode = 400, Message = "Business doesn't have that service" };
 
                 if (!service.IsActive)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Service is not active" };
+                    return new BaseResponse<CalendarModel> { HttpStatusCode = 400, Message = "Service is not active" };
 
                 var monthHolidays = await HolidayRepository.GetAllByMonthAsync(businessId, year, month);
                 var holidayDates = new HashSet<DateTime>(monthHolidays.Select(h => h.HolidayDate.Date));
@@ -312,11 +358,10 @@ namespace Business.SmartAppt.Services.Implementation
                 var endDate = startDate.AddDays(daysInMonth);
                 var bookings = await BookingRepository.GetBookingsCountByBusinessAndRangeAsync(businessId, serviceId, startDate, endDate);
                 
-                var monthlyCalendar = new CalendarDto
+                var monthlyCalendar = new CalendarModel
                 {
                     Month = month,
                     Year = year,
-                    StatusCode = 0
                 };
                 
                 for (int d = 1; d <= daysInMonth; d++)
@@ -327,48 +372,80 @@ namespace Business.SmartAppt.Services.Implementation
                     monthlyCalendar.Days.Add(dayAvailability);
                 }
 
-                return monthlyCalendar;
+                return new BaseResponse<CalendarModel>
+                {
+                    Data = monthlyCalendar,
+                    HttpStatusCode = 200
+                };
             }
             catch (Exception ex)
             {
-                return new ResponseBase
+                return new BaseResponse<CalendarModel>
                 {
-                    StatusCode = 5,
-                    ErrorMessage = ex.Message
+                    HttpStatusCode = 500,
+                    Message = ex.Message
                 };
             }
         }         
 
-        public virtual async Task<ResponseBase> GetMyBookingsAsync(int customerId, int skip = 0, int take = 10)
+        public virtual async Task<BaseResponse<IEnumerable<BookingModel>>> GetMyBookingsAsync(int customerId, int pageNumber = 1, int pageSize = 10)
         {
             try
             {
-                if (skip < 0 || skip >= 100 || take <= 0 || take >= 100)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Invalid Pagination" };
+                if (pageNumber < 1)
+                    pageNumber = 1;
+            
+                if (pageSize < 1)
+                    pageSize = 10;
+            
+                if(pageSize > 100)
+                    pageSize = 100;
 
                 var bookings = await BookingRepository.GetAllSpecAsync(new BookingFilter
                 {
                     CustomerId = customerId,
-                    Skip = skip,
-                    Take = take
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
                 });
                 
-                return new BookingListDto { Bookings = bookings, StatusCode = 0 };
+                List<BookingModel> bookingsList = new List<BookingModel>();
+
+                var bookingEntities = bookings.ToList();
+                foreach (var b in bookingEntities)
+                {
+                    bookingsList.Add(new BookingModel
+                    {
+                        BookingId = b.BookingId,
+                        BusinessId = b.BusinessId,
+                        ServiceId = b.ServiceId,
+                        CustomerId = b.CustomerId,
+                        StartAtUtc = b.StartAtUtc,
+                        EndAtUtc = b.EndAtUtc,
+                        Status = b.Status,
+                        Notes = b.Notes
+                    });
+                }
+
+                return new BaseResponse<IEnumerable<BookingModel>>()
+                {
+                    Data = bookingsList,
+                    HttpStatusCode = 200
+                };
             }
             catch (Exception ex)
             {
-                return new ResponseBase { StatusCode = 5, ErrorMessage = ex.Message };
+                return new BaseResponse<IEnumerable<BookingModel>> { HttpStatusCode = 500, Message = ex.Message };
             }
         }
 
-        public virtual async Task<ResponseBase> UpdateBookingAsync(int customerId, int bookingId, UpdateBookingDto booking)
+        public virtual async Task<BaseResponse<bool>> UpdateBookingAsync(int customerId, int bookingId, UpdateBookingModel booking)
         {
             try
             {
                 // check the date 
                 if (booking.StartAtUtc <= DateTime.UtcNow)
                 {
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Cant book for previous date"};
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Cant book for previous date"};
                 }
                 
                 // Round the milliseconds
@@ -376,17 +453,17 @@ namespace Business.SmartAppt.Services.Implementation
                 
                 var existing = await BookingRepository.GetByIdAsync(bookingId);
                 if (existing == null)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = $"Booking with ID {bookingId} not found" };
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = $"Booking with ID {bookingId} not found" };
                 
                 var customer = await CustomerRepository.GetByIdAsync(customerId);
                 if (customer == null)
-                    return new ResponseBase {StatusCode = 1, ErrorMessage = $"Customer {customerId} not found"};
+                    return new BaseResponse<bool> {HttpStatusCode = 400, Message = $"Customer {customerId} not found"};
 
                 if (existing.CustomerId != customerId)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "You don't have permissions for this booking" };
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "You don't have permissions for this booking" };
                 
                 // new booking
-                var proposedBooking = new CreateBookingDto
+                var proposedBooking = new CreateBookingModel
                 {
                     BusinessId = existing.BusinessId,
                     ServiceId = existing.ServiceId,
@@ -396,7 +473,7 @@ namespace Business.SmartAppt.Services.Implementation
 
                 var service = await ServiceRepository.GetByIdAsync(existing.ServiceId);
                 if (service == null)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Service not found for this booking" };
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Service not found for this booking" };
 
                 // determine the ending time
                 var endAtUtc = proposedBooking.StartAtUtc.AddMinutes(service.DurationMin);
@@ -404,22 +481,22 @@ namespace Business.SmartAppt.Services.Implementation
                 // check holidays for new booking date
                 var holiday = await HolidayRepository.GetByBusinessIdAsync(proposedBooking.BusinessId, proposedBooking.StartAtUtc.Date);
                 if (holiday != null)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = $"It's a holiday: {holiday.Reason}" };
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = $"It's a holiday" };
 
                 // look for hours
                 byte dow = (byte)(((int)booking.StartAtUtc.DayOfWeek + 6) % 7 + 1);  // monday = 1, sunday = 7
                 var hours = await OpeningHoursRepository.GetByBusinessIdAndDowAsync(proposedBooking.BusinessId, dow);
                 if (hours == null)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "No opening hours for this day." };
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "No opening hours for this day." };
 
                 var openAt = proposedBooking.StartAtUtc.Date + hours.OpenTime;
                 var closeAt = proposedBooking.StartAtUtc.Date + hours.CloseTime;
 
                 if (proposedBooking.StartAtUtc < openAt || endAtUtc > closeAt)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Business is not open at this time." };
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Business is not open at this time." };
                 
                 if ((proposedBooking.StartAtUtc.TimeOfDay - hours.OpenTime).TotalMinutes % service.DurationMin != 0)
-                    return new ResponseBase { StatusCode = 2, ErrorMessage = "Booking must start on service-aligned slot" };
+                    return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Booking must start on service-aligned slot" };
                 
                 var existingBookings = await BookingRepository.GetAllSpecAsync(new BookingFilter
                 {
@@ -433,7 +510,7 @@ namespace Business.SmartAppt.Services.Implementation
                 {
                     if (b.BookingId == bookingId) continue; // skip current booking
                     if (b.StartAtUtc == proposedBooking.StartAtUtc)
-                        return new ResponseBase { StatusCode = 2, ErrorMessage = "Time overlaps with an existing booking." };
+                        return new BaseResponse<bool> { HttpStatusCode = 400, Message = "Time overlaps with an existing booking." };
                 }
 
                 existing.CustomerId = customerId;
@@ -443,11 +520,11 @@ namespace Business.SmartAppt.Services.Implementation
 
                 await BookingRepository.UpdateAsync(existing);
 
-                return new ResponseBase { StatusCode = 0 };
+                return new BaseResponse<bool> { Data = true, HttpStatusCode = 200 , Message = "Success"};
             }
             catch (Exception ex)
             {
-                return new ResponseBase { StatusCode = 5, ErrorMessage = ex.Message };
+                return new BaseResponse<bool> { HttpStatusCode = 500, Message = ex.Message };
             }
         }
 

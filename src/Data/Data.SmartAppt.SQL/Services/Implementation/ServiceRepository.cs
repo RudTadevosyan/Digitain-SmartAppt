@@ -70,28 +70,72 @@ namespace Data.SmartAppt.SQL.Services.Implementation
             return null;
         }
 
-        public virtual async Task<IEnumerable<ServiceEntity>> GetAllAsync(int skip = 0, int take = 10)
+        public virtual async Task<IEnumerable<ServiceEntity>> GetAllAsync(int pageNumber = 1, int pageSize = 10)
         {
             await EnsureOpenAsync();
 
-            var services = new List<ServiceEntity>();
             using var cmd = new SqlCommand("core.Service_GetAll", (SqlConnection)Connection);
             cmd.CommandType = CommandType.StoredProcedure;
 
-            cmd.Parameters.Add(new SqlParameter("@Skip", SqlDbType.Int) { Value = skip });
-            cmd.Parameters.Add(new SqlParameter("@Take", SqlDbType.Int) { Value = take });
+            cmd.Parameters.Add(new SqlParameter("@PageNumber", SqlDbType.Int) { Value = pageSize });
+            cmd.Parameters.Add(new SqlParameter("@PageSize", SqlDbType.Int) { Value = pageNumber });
 
             using var reader = await cmd.ExecuteReaderAsync();
+            var services = new List<ServiceEntity>();
+            
+            int ordServiceId = reader.GetOrdinal("ServiceId");
+            int ordBusinessId = reader.GetOrdinal("BusinessId");
+            int ordName = reader.GetOrdinal("Name");
+            int ordDurationMin = reader.GetOrdinal("DurationMin");
+            int ordPrice = reader.GetOrdinal("Price");
+            int ordIsActive = reader.GetOrdinal("IsActive");
+            
             while (await reader.ReadAsync())
             {
                 services.Add(new ServiceEntity
                 {
-                    ServiceId = reader.GetInt32(reader.GetOrdinal("ServiceId")),
-                    BusinessId = reader.GetInt32(reader.GetOrdinal("BusinessId")),
-                    Name = reader.GetString(reader.GetOrdinal("Name")),
-                    DurationMin = reader.GetInt32(reader.GetOrdinal("DurationMin")),
-                    Price = reader.GetDecimal(reader.GetOrdinal("Price")),
-                    IsActive = reader.GetBoolean(reader.GetOrdinal("IsActive")),
+                    ServiceId = reader.GetInt32(ordServiceId),
+                    BusinessId = reader.GetInt32(ordBusinessId),
+                    Name = reader.GetString(ordName),
+                    DurationMin = reader.GetInt32(ordDurationMin),
+                    Price = reader.GetDecimal(ordPrice),
+                    IsActive = reader.GetBoolean(ordIsActive),
+                });
+            }
+
+            return services;
+        }
+
+        public virtual async Task<IEnumerable<ServiceEntity>> GetByBusinessIdAsync(int businessId)
+        {
+            await EnsureOpenAsync();
+            
+            using var cmd = new SqlCommand("core.Service_GetByBusinessId", (SqlConnection)Connection);
+            cmd.CommandType = CommandType.StoredProcedure;
+            
+            cmd.Parameters.Add(new SqlParameter("@BusinessId", SqlDbType.Int) { Value = businessId });
+            
+            using var reader = await cmd.ExecuteReaderAsync();
+            
+            var ordServiceId= reader.GetOrdinal("ServiceId");
+            var ordBusinessId= reader.GetOrdinal("BusinessId");
+            var ordName= reader.GetOrdinal("Name");
+            var ordDurationMin= reader.GetOrdinal("DurationMin");
+            var ordPrice= reader.GetOrdinal("Price");
+            var ordIsActive= reader.GetOrdinal("IsActive");
+
+            var services = new List<ServiceEntity>();
+
+            while (await reader.ReadAsync())
+            {
+                services.Add(new ServiceEntity
+                {
+                    ServiceId = reader.GetInt32(ordServiceId),
+                    BusinessId = reader.GetInt32(ordBusinessId),
+                    Name = reader.GetString(ordName),
+                    DurationMin = reader.GetInt32(ordDurationMin),
+                    Price = reader.GetDecimal(ordPrice),
+                    IsActive = reader.GetBoolean(ordIsActive)
                 });
             }
 
@@ -129,6 +173,30 @@ namespace Data.SmartAppt.SQL.Services.Implementation
             cmd.CommandType = CommandType.StoredProcedure;
             cmd.Parameters.Add(new SqlParameter("@ServiceId", SqlDbType.Int) { Value = serviceId });
 
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        public virtual async Task DeactivateAsync(int serviceId)
+        {
+            await EnsureOpenAsync();
+            
+            using var cmd = new SqlCommand("core.Service_Deactivate", (SqlConnection)Connection);
+            cmd.CommandType = CommandType.StoredProcedure;
+            
+            cmd.Parameters.Add(new SqlParameter("@ServiceId", SqlDbType.Int) { Value = serviceId });
+            
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        public virtual async Task ActivateAsync(int serviceId)
+        {
+            await EnsureOpenAsync();
+            
+            using var cmd = new SqlCommand("core.Service_Activate", (SqlConnection)Connection);
+            cmd.CommandType = CommandType.StoredProcedure;
+            
+            cmd.Parameters.Add(new SqlParameter("@ServiceId", SqlDbType.Int) { Value = serviceId });
+            
             await cmd.ExecuteNonQueryAsync();
         }
     }

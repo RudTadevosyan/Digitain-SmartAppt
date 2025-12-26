@@ -12,6 +12,7 @@ public static class BusinessLayerRegister
     {
         // Services DI
         services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<IBusinessService, BusinessService>();
         
         services.AddDataLayerServices(config);
         

@@ -1,0 +1,11 @@
+﻿namespace Business.SmartAppt.Models.ServiceModels;
+
+public class ServiceModel
+{
+    public int ServiceId {get; set;}
+    public int BusinessId {get; set;}
+    public string Name { get; set; } = null!;
+    public int DurationMin {get; set;}
+    public Decimal Price {get; set;}
+    public bool IsActive {get; set;}
+}

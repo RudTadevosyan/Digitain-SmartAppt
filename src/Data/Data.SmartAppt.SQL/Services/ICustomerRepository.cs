@@ -5,7 +5,7 @@ namespace Data.SmartAppt.SQL.Services
 {
     public interface ICustomerRepository
     {
-        Task<IEnumerable<CustomerEntity>> GetAllAsync(int skip = 0, int take = 10);
+        Task<IEnumerable<CustomerEntity>> GetAllAsync(int pageNumber = 1, int pageSize = 10);
         Task<IEnumerable<CustomerEntity>> GetByBusinessIdAsync(int businessId);
         Task<CustomerEntity?> GetByIdAsync(int customerId);
         Task<int> CreateAsync(CustomerEntity entity);
